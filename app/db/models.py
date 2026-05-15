@@ -1,6 +1,19 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Table
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
+from app.db.base import Base
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    token = Column(String(500), unique=True, index=True)
+    revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime)
 
 user_roles = Table(
     "user_roles",
@@ -43,3 +56,10 @@ class Permission(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(100), unique=True)
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    id = Column(Integer, primary_key=True)
+    token_jti = Column(String(255), unique=True, index=True)
+    revoked_at = Column(DateTime, default=datetime.utcnow)
