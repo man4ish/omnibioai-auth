@@ -3,7 +3,14 @@ import os
 
 import redis as _redis_sync
 from fastapi import APIRouter, Depends, HTTPException
+from prometheus_client import Counter
 from sqlalchemy.orm import Session
+
+JWT_AUTH_TOTAL = Counter(
+    "jwt_auth_total",
+    "JWT authentication attempts",
+    ["endpoint", "result"],
+)
 
 from app.db.session import get_db
 from app.db.models import User, RefreshToken, RevokedToken
@@ -58,9 +65,11 @@ def register(req: LoginRequest, db: Session = Depends(get_db)):
 def login(req: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(db, req.email, req.password)
     if not user:
+        JWT_AUTH_TOTAL.labels(endpoint="/auth/login", result="failure").inc()
         raise HTTPException(401, "Invalid credentials")
 
     access, refresh = generate_tokens(db, user)
+    JWT_AUTH_TOTAL.labels(endpoint="/auth/login", result="success").inc()
     return {
         "access_token": access,
         "refresh_token": refresh,
