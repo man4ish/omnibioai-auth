@@ -120,33 +120,46 @@ def test_logout(client, auth_tokens):
     assert resp.json()["message"] == "Logged out"
 
 
-def test_refresh_fails_after_logout(client, registered_user):
-    """After logout the refresh token is revoked; new access tokens cannot be issued."""
+def test_access_token_revoked_after_logout(client, registered_user):
+    """Access token must be invalid immediately after logout."""
     login_resp = client.post("/auth/login", json=registered_user)
     tokens = login_resp.json()
 
-    client.post("/auth/logout", json={"refresh_token": tokens["refresh_token"]})
+    valid_resp = client.post("/auth/validate", json={"token": tokens["access_token"]})
+    assert valid_resp.json()["valid"] is True
 
-    # Refresh must be rejected once the refresh_token row is revoked
+    client.post("/auth/logout", json={
+        "refresh_token": tokens["refresh_token"],
+        "access_token": tokens["access_token"],
+    })
+
+    invalid_resp = client.post("/auth/validate", json={"token": tokens["access_token"]})
+    assert invalid_resp.json()["valid"] is False
+
+
+def test_refresh_fails_after_logout(client, registered_user):
+    """Refresh token must be invalid after logout."""
+    login_resp = client.post("/auth/login", json=registered_user)
+    tokens = login_resp.json()
+
+    client.post("/auth/logout", json={
+        "refresh_token": tokens["refresh_token"],
+        "access_token": tokens["access_token"],
+    })
+
     refresh_resp = client.post(
         "/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
     )
     assert refresh_resp.status_code == 401
 
 
-def test_access_token_still_valid_after_logout(client, registered_user):
-    """Short-lived access tokens remain valid after logout.
-
-    The implementation revokes the refresh_token row but does not insert
-    the access token's JTI into revoked_tokens.  Validate checks only that
-    table, so the access token is still accepted until it expires.
-    """
+def test_logout_without_access_token_still_works(client, registered_user):
+    """Logout must work even if access_token is not provided."""
     login_resp = client.post("/auth/login", json=registered_user)
     tokens = login_resp.json()
 
-    client.post("/auth/logout", json={"refresh_token": tokens["refresh_token"]})
-
-    validate_resp = client.post(
-        "/auth/validate", json={"token": tokens["access_token"]}
-    )
-    assert validate_resp.json()["valid"] is True
+    resp = client.post("/auth/logout", json={
+        "refresh_token": tokens["refresh_token"],
+    })
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "Logged out"

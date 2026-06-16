@@ -1,5 +1,6 @@
 import os
 import pytest
+from unittest.mock import patch
 
 # Must be set before any app module is imported so config.settings has a key.
 os.environ.setdefault("SECRET_KEY", "test-secret-key-omnibioai-32-chars-x!")
@@ -51,8 +52,23 @@ def setup_db():
 @pytest.fixture(scope="session")
 def client(setup_db):
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
+
+    _blacklisted = {}
+
+    def _setex(key, ttl, value):
+        _blacklisted[key] = value
+        return True
+
+    def _exists(key):
+        return 1 if key in _blacklisted else 0
+
+    with patch("app.api.routes_auth._pub") as mock_pub, \
+         patch("app.api.routes_auth._blacklist") as mock_bl:
+        mock_pub.publish.return_value = None
+        mock_bl.setex.side_effect = _setex
+        mock_bl.exists.side_effect = _exists
+        with TestClient(app) as c:
+            yield c
     app.dependency_overrides.clear()
 
 
